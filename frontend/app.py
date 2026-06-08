@@ -9,7 +9,7 @@ import base64
 st.set_page_config(page_title="AgroScan AI Real-time", layout="wide", page_icon="🍎")
 
 # URL API Backend FastAPI
-API_URL = "http://127.0.0.1:8000/predict_live"
+API_URL = "https://thhmmzz-agroscan-backend-api.hf.space"
 
 # --- KUSTOMISASI TAMPILAN (CSS) ---
 st.markdown("""
