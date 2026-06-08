@@ -41,23 +41,20 @@ if mode == "🏠 Beranda":
     with col1:
         st.subheader("Selamat Datang di Smart Farming System")
         st.write("""
-            Aplikasi ini mendeteksi kualitas buah secara otomatis dan real-time lewat video kamera secara responsif.
+            Aplikasi ini mendeteksi kualitas buah secara otomatis dan real-time lewat video kamera tanpa perlu menekan tombol jepret foto.
         """)
     with col2:
         st.image("https://img.freepik.com/free-vector/smart-farming-concept-illustration_114360-7527.jpg")
 
 elif mode == "📸 Scan Buah Real-time":
-    st.subheader("Pusat Deteksi Kamera Multidevice")
-    
-    # PILIHAN METODE SCAN (Memisahkan fitur Laptop dan HP)
-    metode_scan = st.radio(
-        "Pilih Perangkat Keras Anda:", 
-        ["💻 Scan Otomatis / Live (Laptop/PC)", "📱 Ambil Foto (Handphone)"],
-        horizontal=True
-    )
+    st.subheader("Pusat Deteksi Video Live (Laptop/PC)")
     
     col_cam, col_info = st.columns([2, 1])
     
+    with col_cam:
+        run_camera = st.checkbox("Nyalakan Kamera Scanner", value=False)
+        FRAME_WINDOW = st.image([]) 
+        
     with col_info:
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
         st.write("### 📋 Hasil Analisis NLP & ML")
@@ -65,79 +62,36 @@ elif mode == "📸 Scan Buah Real-time":
         audio_placeholder = st.empty()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- MODE 1: LAPTOP / PC (REAL-TIME OTOMATIS DENGAN RE-TRIGGER SUARA PINTAR) ---
-    if metode_scan == "💻 Scan Otomatis / Live (Laptop/PC)":
-        with col_cam:
-            run_camera = st.checkbox("Nyalakan Kamera Scanner (Laptop)", value=False)
-            FRAME_WINDOW = st.image([]) 
-            
-        if run_camera:
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            
-            # Pengunci berbasis State Label agar suara tidak macet dan bisa bunyi berulang
-            if "last_detected_label" not in st.session_state:
-                st.session_state.last_detected_label = ""
-            
-            while run_camera:
-                ret, frame = cap.read()
-                if not ret:
-                    info_placeholder.error("Gagal mengakses webcam laptop.")
-                    break
-                    
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                _, img_encoded = cv2.imencode('.jpg', frame)
-                img_bytes = img_encoded.tobytes()
-                
-                FRAME_WINDOW.image(frame_rgb, channels="RGB")
-                
-                try:
-                    response = requests.post(API_URL, files={"file": ("frame.jpg", img_bytes, "image/jpeg")})
-                    if response.status_code == 200:
-                        result = response.json()
-                        
-                        if result.get("detected"):
-                            label_name = result["label_name"]
-                            prob = result["confidence"]
-                            naratif = result["naratif"]
-                            
-                            with info_placeholder.container():
-                                st.metric(label="Status Objek", value=label_name.upper())
-                                st.metric(label="Akurasi", value=f"{prob:.2%}")
-                                st.info(naratif)
-                            
-                            # Suara berbunyi jika terdeteksi buah baru ATAU status kematangannya berubah
-                            if st.session_state.last_detected_label != label_name:
-                                audio_b64 = result["audio_b64"]
-                                audio_html = f'<audio autoplay="true"><source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3"></audio>'
-                                audio_placeholder.markdown(audio_html, unsafe_allow_html=True)
-                                
-                                # Kunci label agar tidak spamming suara di frame berikutnya
-                                st.session_state.last_detected_label = label_name
-                        else:
-                            with info_placeholder.container():
-                                st.warning("Menunggu buah dihadapkan ke kamera...")
-                            # Jika buah dipalingkan (tidak terdeteksi), reset kunci agar buah selanjutnya langsung bersuara
-                            st.session_state.last_detected_label = ""
-                            
-                except Exception:
-                    pass
-                time.sleep(0.03)
-            cap.release()
-        else:
-            FRAME_WINDOW.image("https://dummyimage.com/600x400/000/fff&text=Kamera+Laptop+Mati")
+    if run_camera:
+        # Menggunakan cv2.CAP_DSHOW agar kamera laptop stabil
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        
+        # Inisialisasi pengunci suara berbasis label agar bisa bunyi berulang otomatis
+        if "last_detected_label" not in st.session_state:
             st.session_state.last_detected_label = ""
-
-    # --- MODE 2: HANDPHONE (TAKE PHOTO VIA HTTPS BROWSER AMAN) ---
-    else:
-        with col_cam:
-            img_file_buffer = st.camera_input("Arahkan kamera HP Anda ke buah apel")
+        
+        while run_camera:
+            ret, frame = cap.read()
+            if not ret:
+                st.error("Gagal mengakses kamera.")
+                break
+                
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-        if img_file_buffer is not None:
-            img_bytes = img_file_buffer.getvalue()
+            # Encode frame gambar menjadi format JPEG bytes untuk dikirim via API
+            _, img_encoded = cv2.imencode('.jpg', frame)
+            img_bytes = img_encoded.tobytes()
+            
+            # Tampilkan video live streaming di layar laptop
+            FRAME_WINDOW.image(frame_rgb, channels="RGB")
+            
             try:
+                # Kirim frame ke Backend API Hugging Face Cloud
                 response = requests.post(API_URL, files={"file": ("frame.jpg", img_bytes, "image/jpeg")})
+                
                 if response.status_code == 200:
                     result = response.json()
+                    
                     if result.get("detected"):
                         label_name = result["label_name"]
                         prob = result["confidence"]
@@ -148,17 +102,30 @@ elif mode == "📸 Scan Buah Real-time":
                             st.metric(label="Akurasi", value=f"{prob:.2%}")
                             st.info(naratif)
                         
-                        # Mode HP selalu membunyikan suara setiap kali tombol jepret ditekan
-                        audio_b64 = result["audio_b64"]
-                        audio_html = f'<audio autoplay="true"><source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3"></audio>'
-                        audio_placeholder.markdown(audio_html, unsafe_allow_html=True)
+                        # LOGIKA SUARA PINTAR: Bunyi jika buah baru ATAU labelnya berubah
+                        if st.session_state.last_detected_label != label_name:
+                            audio_b64 = result["audio_b64"]
+                            audio_html = f'<audio autoplay="true"><source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3"></audio>'
+                            audio_placeholder.markdown(audio_html, unsafe_allow_html=True)
+                            
+                            # Kunci label agar tidak spamming suara terus-menerus
+                            st.session_state.last_detected_label = label_name
                     else:
                         with info_placeholder.container():
-                            st.warning("Buah tidak terdeteksi, silakan ambil foto ulang dengan posisi lebih dekat.")
+                            st.warning("Menunggu buah dihadapkan ke kamera...")
+                        # Jika buah dipalingkan (tidak terdeteksi), reset kunci suara otomatis
+                        st.session_state.last_detected_label = ""
+                        
             except Exception:
-                info_placeholder.error("Gagal terhubung ke server kecerdasan AI.")
-        else:
-            info_placeholder.warning("Silakan klik tombol jepret di HP untuk menganalisis.")
+                pass
+                
+            time.sleep(0.03)
+            
+        cap.release()
+    else:
+        FRAME_WINDOW.image("https://dummyimage.com/600x400/000/fff&text=Kamera+Mati")
+        # Reset status kunci jika sakelar kamera dimatikan
+        st.session_state.last_detected_label = ""
 
 elif mode == "📊 Laporan Riwayat":
     st.subheader("Data Statistik Panen")
