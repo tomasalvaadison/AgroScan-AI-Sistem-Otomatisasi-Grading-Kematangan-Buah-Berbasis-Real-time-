@@ -1,5 +1,2 @@
 streamlit
 requests
-streamlit-webrtc
-opencv-python-headless
-numpy
